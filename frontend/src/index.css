@@ -1,0 +1,102 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
+
+:root {
+  /* ── Blue & White Mixed Palette ── */
+  --bg-base:        #EEF2FF;   /* Body — cool blue-tinted gray */
+  --bg-card:        #FFFFFF;   /* Cards — pure white */
+  --bg-subtle:      #F0F5FF;   /* Subtle inset / recessed areas */
+  --bg-hover:       #E8EFFF;   /* Card hover */
+
+  /* Trust Blue Accent */
+  --accent:         #2563EB;   /* Primary action — vivid blue */
+  --accent-hover:   #1D4ED8;
+
+  /* Status Colors — muted, not distracting */
+  --sage-green:     #166534;
+  --sage-green-bg:  #ECFDF5;
+  --sage-green-bd:  #BBF7D0;
+  --clay-red:       #991B1B;
+  --clay-red-bg:    #FEF2F2;
+  --clay-red-bd:    #FECACA;
+
+  /* Text — navy/slate, NOT pure black */
+  --text-primary:   #1E3A5F;   /* Deep ocean blue — headings */
+  --text-secondary: #3B5A8A;   /* Mid blue — labels, secondary */
+  --text-muted:     #6B87B5;   /* Soft blue-gray — hints */
+  --text-placeholder: #A8BEDC;
+
+  /* Borders */
+  --border:         #CCDBF0;
+  --border-focus:   #2563EB;
+
+  /* Diffused Shadows */
+  --shadow-xs:  0 1px 3px rgba(37,99,235,0.06), 0 1px 2px rgba(37,99,235,0.04);
+  --shadow-sm:  0 4px 6px -1px rgba(37,99,235,0.08), 0 2px 4px -1px rgba(37,99,235,0.04);
+  --shadow-md:  0 10px 15px -3px rgba(37,99,235,0.08), 0 4px 6px -2px rgba(37,99,235,0.03);
+  --shadow-lg:  0 20px 25px -5px rgba(37,99,235,0.09), 0 10px 10px -5px rgba(37,99,235,0.03);
+  --shadow-lift: 0 20px 40px -8px rgba(37,99,235,0.14), 0 8px 16px -4px rgba(37,99,235,0.06);
+  --shadow-inset: inset 0 2px 6px rgba(37,99,235,0.07);
+
+  /* Radii */
+  --radius-sm:  8px;
+  --radius-md:  14px;
+  --radius-lg:  20px;
+  --radius-xl:  28px;
+
+  /* Header glass */
+  --header-bg: rgba(255,255,255,0.82);
+}
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+  background: var(--bg-base);
+  background-image:
+    radial-gradient(ellipse at 10% 0%, rgba(37,99,235,0.10) 0%, transparent 45%),
+    radial-gradient(ellipse at 90% 100%, rgba(99,102,241,0.08) 0%, transparent 45%),
+    radial-gradient(ellipse at 50% 50%, rgba(37,99,235,0.04) 0%, transparent 60%);
+  color: var(--text-primary);
+  min-height: 100vh;
+  overflow-x: hidden;
+  -webkit-font-smoothing: antialiased;
+  letter-spacing: -0.01em;
+}
+
+#root {
+  min-height: 100vh;
+}
+
+/* Scrollbar */
+::-webkit-scrollbar { width: 5px; }
+::-webkit-scrollbar-track  { background: var(--bg-base); }
+::-webkit-scrollbar-thumb  { background: var(--border); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: var(--text-muted); }
+
+/* ── Animations ── */
+@keyframes fadeUp {
+  from { opacity: 0; transform: translateY(18px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+@keyframes slideUp {
+  from { opacity: 0; transform: translateY(28px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+@keyframes pulse-dot {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50%       { opacity: 0.6; transform: scale(0.85); }
+}
+@keyframes float {
+  0%, 100% { transform: translateY(0); }
+  50%       { transform: translateY(-5px); }
+}
+
+.fade-in  { animation: fadeUp  0.45s ease-out both; }
+.slide-up { animation: slideUp 0.55s ease-out both; }
