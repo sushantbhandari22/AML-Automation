@@ -17,7 +17,7 @@ class DataProcessor:
 
     # ── Channel Keywords — ALL LOWERCASE (combined string is .lower()) ──
     _CHANNEL_RULES: List[Tuple[str, Callable[[str, str], bool]]] = [
-        ("FD Deal",               lambda c, r: 'fd deal' in c or ('choose by user' in r and 'fd' in c)),
+        ("FD Deal",               lambda c, r: 'fd deal' in c or ('choose by user' in r)),
         ("Internal Transfer TXN", lambda c, _: 'trf' in c or 'transfer' in c),
         ("IPS TXN",               lambda c, _: any(k in c for k in ['cips', 'bnkft', 'nimb-xp', 'connectips', 'o/w ips', 'ips-'])),
         ("Clearing/RTGS TXN",     lambda c, _: any(k in c for k in ['owl clg chq', 'owchq', 'rtgs', 'rtgs fund trf', 'inc-ecc', 'chq presentment'])),
