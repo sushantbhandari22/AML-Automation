@@ -11,8 +11,8 @@ AUTOMATION/
 │   ├── pipeline.py         # Unified Pipeline Orchestrator
 │   ├── reconciliation.py   # Data Integrity & Verification Engine
 │   ├── core/
-│   │   ├── metadata.py     # Regex-based Metadata Extraction & Lookup
 │   │   ├── processor.py    # Formatting & Channel Categorization
+│   │   ├── validator.py    # Data Integrity Checks
 │   ├── exporter.py     # Generates Annex_Report and Bank_Report
 │   └── styler.py       # Openpyxl-based Visual Styling
 └── frontend/
@@ -72,7 +72,8 @@ The system performs a 3-layer verification before report generation:
 
 ## 4. Technical Strategy
 
-- **Zero-Touch Metadata**: Automatically detects Bank Name, Account Number, and Dates using regex from the raw file headers during upload.
+- **Zero-Touch Date Discovery**: Backend automatically scans both file headers and transaction columns to auto-fill the report date range (Start/End Date) upon upload.
+- **Manual Metadata Entry**: Primary account metadata (Bank Name, Account Number) is entered by the user to ensure 100% accuracy in the final reports.
 - **Hybrid Performance**: Uses `Pandas` for high-speed data crunching and `Openpyxl` for precise post-processing and visual styling.
 - **Session Isolation**: Each user request is handled in a unique UUID-based session directory to prevent data leakage and ensure multi-user compatibility.
 
@@ -84,3 +85,4 @@ The system implements a structured logging strategy intended for immediate error
 - **Context-Aware Correlation**: Uses Python `contextvars` to automatically inject a global `session_id` into all relevant log entries, ensuring you can trace a user's exact path from upload to generated report.
 - **JSON Formatting**: Configured via `backend/core/logger.py` to output machine-readable JSON logs for rapid parsing and ingestion into log monitoring tools.
 - **Business Logic Telemetry**: The `ReconciliationEngine` explicitly tracks and logs when internal logic fails (e.g., checksum validation) separately from code crashes, giving insight into data-level corruption.
+- **User Audit Trail**: Every significant user action (Login, Logout, Report Generation) is now formally recorded in the `system.log`. Log entries include the specific authenticated user (e.g., `"user": "sushant"`), ensuring full accountability for all system operations.

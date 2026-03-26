@@ -49,6 +49,12 @@ const FileSVG = () => (
 )
 
 export default function App() {
+  const [isAuthenticated, setIsAuthenticated] = useState(false)
+  const [authenticatedUser, setAuthenticatedUser] = useState('')
+  const [loginCreds, setLoginCreds] = useState({ username: '', password: '' })
+  const [loginError, setLoginError] = useState(null)
+  const [isLoggingIn, setIsLoggingIn] = useState(false)
+
   const [stage, setStage] = useState(1)
   const [sessionId, setSessionId] = useState(null)
   const [uploadResult, setUploadResult] = useState(null)
@@ -67,34 +73,54 @@ export default function App() {
   })
   const [selectedAnnexes, setSelectedAnnexes] = useState(['I', 'II', 'III', 'IV', 'TreeMap'])
 
-  // ── Instant Lookup ──────────────────────────────────
-  useEffect(() => {
-    const acc = meta.account_number
-    if (acc && acc.length >= 8) {
-      const delay = setTimeout(async () => {
-        try {
-          const res = await fetch(`${API}/api/lookup/${acc}`)
-          if (res.ok) {
-            const data = await res.json()
-            if (Object.keys(data).length > 0) {
-              setMeta(prev => ({
-                ...prev,
-                bank_name: data['Bank Name'] || prev.bank_name,
-                branch_name: data['Branch Name'] || prev.branch_name,
-                account_name: data['Account Name'] || prev.account_name,
-                account_type: data['Account Type'] || prev.account_type,
-                nature_of_account: data['Nature of Account'] || prev.nature_of_account,
-                currency: data['Currency'] || prev.currency,
-              }))
-            }
-          }
-        } catch (e) {
-          console.error('Lookup failed', e)
-        }
-      }, 500)
-      return () => clearTimeout(delay)
+  // ── Instant Lookup Removed ─────────────────────────
+
+  // ── Login ───────────────────────────────────────────
+  const handleLogin = async (e) => {
+    e.preventDefault()
+    setIsLoggingIn(true)
+    setLoginError(null)
+    try {
+      const form = new FormData()
+      form.append('username', loginCreds.username)
+      form.append('password', loginCreds.password)
+      const res = await fetch(`${API}/api/login`, { method: 'POST', body: form })
+      if (!res.ok) throw new Error("Invalid username or password")
+      await res.json()
+      setAuthenticatedUser(loginCreds.username)
+      setIsAuthenticated(true)
+    } catch (err) {
+      setLoginError(err.message)
+    } finally {
+      setIsLoggingIn(false)
     }
-  }, [meta.account_number])
+  }
+
+  // ── Logout ──────────────────────────────────────────
+  const handleLogout = async () => {
+    try {
+      const form = new FormData()
+      form.append('username', authenticatedUser)
+      form.append('session_id', sessionId || 'none')
+      await fetch(`${API}/api/logout`, { method: 'POST', body: form })
+    } catch (e) {
+      console.error("Logout log failed", e)
+    }
+    // Always reset local state
+    setIsAuthenticated(false)
+    setAuthenticatedUser('')
+    setStage(1)
+    setSessionId(null)
+    setUploadResult(null)
+    setVerifyResult(null)
+    setGenerateResult(null)
+    setError(null)
+    setMeta({
+      bank_name: '', branch_name: '', account_name: '', account_number: '',
+      account_type: '', nature_of_account: '', currency: 'NPR',
+      start_date: '', end_date: '',
+    })
+  }
 
   // ── Upload ───────────────────────────────────────────
   const handleUpload = useCallback(async (file) => {
@@ -168,6 +194,7 @@ export default function App() {
     try {
       const form = new FormData()
       form.append('session_id', sessionId)
+      form.append('username', authenticatedUser)
       Object.entries(meta).forEach(([k, v]) => form.append(k, v))
       form.append('annexes', selectedAnnexes.join(','))
       const res = await fetch(`${API}/api/generate`, { method: 'POST', body: form })
@@ -189,6 +216,43 @@ export default function App() {
   }
 
   const updateMeta = (key, val) => setMeta(prev => ({ ...prev, [key]: val }))
+
+  // ── Stage 0: Login ─────────────────────────────────
+  const renderLogin = () => (
+    <div className="card slide-up" style={{ maxWidth: 420, margin: '80px auto' }}>
+      <div className="card-title">Secured Access</div>
+      <div className="card-subtitle">
+        Please authenticate to access the AML Report Engine.
+      </div>
+      <form onSubmit={handleLogin} className="config-grid" style={{ gridTemplateColumns: '1fr', gap: 20 }}>
+        <div className="form-group">
+          <label>Username</label>
+          <input 
+            type="text" 
+            value={loginCreds.username} 
+            onChange={e => setLoginCreds(prev => ({...prev, username: e.target.value}))} 
+            placeholder="Username"
+            required
+            autoFocus
+          />
+        </div>
+        <div className="form-group">
+          <label>Password</label>
+          <input 
+            type="password" 
+            value={loginCreds.password} 
+            onChange={e => setLoginCreds(prev => ({...prev, password: e.target.value}))} 
+            placeholder="Password"
+            required
+          />
+        </div>
+        {loginError && <div className="status-msg error" style={{ margin: 0, padding: '10px 14px' }}>⚠ {loginError}</div>}
+        <button className="btn btn-primary" type="submit" disabled={isLoggingIn} style={{ justifyContent: 'center', marginTop: 8 }}>
+          {isLoggingIn ? <div className="spinner"></div> : 'Login'}
+        </button>
+      </form>
+    </div>
+  )
 
   // ── Stage 1: Ingest ─────────────────────────────────
   const renderUpload = () => (
@@ -461,47 +525,73 @@ export default function App() {
     <>
       {/* ── Glass Header ── */}
       <header className="app-header">
-        <div className="logo">
-          <img src={bankLogo} className="nav-logo" alt="Bank Logo" />
-          <div className="logo-divider"></div>
-          <div>
-            <div className="logo-text">AML Report Engine</div>
-            <div className="logo-sub">Anti-Money Laundering Automation</div>
+        <div className="header-content">
+          <div className="logo">
+            <img src={bankLogo} alt="Bank Logo" className="logo-img" />
+            <div>
+              <div className="logo-text">AML Report Engine</div>
+              <div className="logo-sub">Anti-Money Laundering Automation</div>
+            </div>
           </div>
-        </div>
-        <div className="header-status">
-          <span className="status-dot"></span>
-          System Online
+          <div className="header-controls">
+            <div className="header-status">
+              <span className="status-dot"></span>
+              System Online
+            </div>
+            {isAuthenticated && (
+              <div className="user-info">
+                <div className="user-badge">
+                  <span className="user-name">{authenticatedUser}</span>
+                </div>
+                <button className="btn-logout" onClick={handleLogout}>
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path>
+                    <polyline points="16 17 21 12 16 7"></polyline>
+                    <line x1="21" y1="12" x2="9" y2="12"></line>
+                  </svg>
+                  Logout
+                </button>
+              </div>
+            )}
+          </div>
         </div>
       </header>
 
-      {/* ── Progress Stepper ── */}
-      <div className="steps-bar">
-        {STAGES.map((s, i) => (
-          <div key={s.id} style={{ display: 'flex', alignItems: 'center' }}>
-            <div
-              className={`step ${stage === s.id ? 'active' : ''} ${stage > s.id ? 'completed' : ''}`}
-              onClick={() => { if (s.id < stage) setStage(s.id) }}
-            >
-              <div className="step-number">
-                {stage > s.id ? '✓' : s.id}
+      {!isAuthenticated ? (
+        <main className="main-content login-page">
+          {renderLogin()}
+        </main>
+      ) : (
+        <>
+          {/* ── Progress Stepper ── */}
+          <div className="steps-bar">
+            {STAGES.map((s, i) => (
+              <div key={s.id} style={{ display: 'flex', alignItems: 'center' }}>
+                <div
+                  className={`step ${stage === s.id ? 'active' : ''} ${stage > s.id ? 'completed' : ''}`}
+                  onClick={() => { if (s.id < stage) setStage(s.id) }}
+                >
+                  <div className="step-number">
+                    {stage > s.id ? '✓' : s.id}
+                  </div>
+                  <span className="step-label">{s.label}</span>
+                </div>
+                {i < STAGES.length - 1 && (
+                  <div className={`step-connector ${stage > s.id ? 'done' : ''}`} />
+                )}
               </div>
-              <span className="step-label">{s.label}</span>
-            </div>
-            {i < STAGES.length - 1 && (
-              <div className={`step-connector ${stage > s.id ? 'done' : ''}`} />
-            )}
+            ))}
           </div>
-        ))}
-      </div>
 
-      {/* ── Content ── */}
-      <main className="main-content">
-        {stage === 1 && renderUpload()}
-        {stage === 2 && renderVerify()}
-        {stage === 3 && renderConfig()}
-        {stage === 4 && renderDownload()}
-      </main>
+          {/* ── Content ── */}
+          <main className="main-content">
+            {stage === 1 && renderUpload()}
+            {stage === 2 && renderVerify()}
+            {stage === 3 && renderConfig()}
+            {stage === 4 && renderDownload()}
+          </main>
+        </>
+      )}
     </>
   )
 }

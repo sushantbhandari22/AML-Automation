@@ -5,7 +5,6 @@ Thin orchestrator that coordinates the core modules:
   core.processor  → Data ingestion, classification, balance reconstruction
   core.validator   → Non-blocking integrity checks
   core.exporter    → Excel report generation
-  core.metadata    → Account metadata extraction
 
 Usage:
     gen = AMLReportGenerator(raw_path, output_dir, account_metadata)
@@ -17,7 +16,6 @@ from datetime import datetime, timedelta
 from core.processor import DataProcessor
 from core.validator import DataValidator
 from core.exporter import ReportExporter
-from core.metadata import MetadataExtractor
 from core.logger import get_logger
 
 logger = get_logger(__name__)
@@ -99,28 +97,4 @@ class AMLReportGenerator:
         }
 
 
-# Re-export MetadataExtractor for backward compatibility with app.py
-__all__ = ["AMLReportGenerator", "MetadataExtractor"]
-
-
-# ── CLI Entry Point ──────────────────────────────────────────────────
-if __name__ == "__main__":
-    account_metadata = {
-        "Bank Name": "Jyoti Bikash Bank Limited",
-        "Branch Name": "064 (Parwanipur Branch)",
-        "Account Name": "Amir Husen Ansari",
-        "Account Number": "06401300927516000001",
-        "Account Type": "13",
-        "Nature of Account": "Jyoti Smart Savings",
-        "Currency": "NPR",
-        "Start Date": "2026-01-20",
-        "End Date": "2026-01-25",
-    }
-
-    bot = AMLReportGenerator(
-        raw_data_path="raw_data.csv",
-        output_dir="./Automated_AML_Reports",
-        account_metadata=account_metadata,
-    )
-    result = bot.run_full_pipeline()
-    print("Pipeline complete!", result)
+__all__ = ["AMLReportGenerator"]

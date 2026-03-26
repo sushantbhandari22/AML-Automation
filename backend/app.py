@@ -8,8 +8,9 @@ import uuid
 import io
 import json
 import zipfile
+import re
 from datetime import datetime
-from typing import Optional
+from typing import Optional, List
 
 import numpy as np
 import pandas as pd
@@ -20,10 +21,9 @@ from fastapi.responses import FileResponse, StreamingResponse, JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 
 from pipeline import AMLReportGenerator
-from core.metadata import MetadataExtractor
 from core.processor import DataProcessor
 from reconciliation import ReconciliationEngine
-from core.logger import get_logger, session_ctx_var
+from core.logger import get_logger, session_ctx_var, user_ctx_var, ip_ctx_var
 
 logger = get_logger(__name__)
 
@@ -59,6 +59,57 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# ── Audit Middleware ──────────────────────────────────────────────────
+from fastapi import Request
+@app.middleware("http")
+async def audit_middleware(request: Request, call_next):
+    """Capture client IP and reset user context for every request."""
+    ip_ctx_var.set(request.client.host if request.client else "127.0.0.1")
+    user_ctx_var.set("system") # Default
+    response = await call_next(request)
+    return response
+
+# ── Authentication ────────────────────────────────────────────────────
+@app.post("/api/login")
+async def login(username: str = Form(...), password: str = Form(...)):
+    """Simple hardcoded authentication."""
+    session_id = str(uuid.uuid4())
+    session_ctx_var.set(session_id)
+    user_ctx_var.set(username)
+    
+    if username == "sushant" and password == "123":
+        logger.info(
+            f"User logged in successfully: {username}", 
+            extra={
+                "user": username, 
+                "event": "LOGIN_SUCCESS",
+                "session_id": session_id
+            }
+        )
+        return JSONResponse(content={"status": "success", "user": username, "session_id": session_id})
+    
+    logger.warning(
+        f"Failed login attempt for username: {username}", 
+        extra={"event": "LOGIN_FAILED", "session_id": session_id}
+    )
+    raise HTTPException(status_code=401, detail="Invalid username or password")
+    
+
+@app.post("/api/logout")
+async def logout(username: str = Form(...), session_id: str = Form(...)):
+    """Log the logout event."""
+    session_ctx_var.set(session_id)
+    user_ctx_var.set(username)
+    logger.info(
+        f"User logged out: {username}", 
+        extra={
+            "user": username, 
+            "event": "LOGOUT",
+            "session_id": session_id
+        }
+    )
+    return {"status": "success"}
+
 # Session storage
 SESSIONS_DIR = os.path.join(os.path.dirname(__file__), "sessions")
 os.makedirs(SESSIONS_DIR, exist_ok=True)
@@ -86,13 +137,39 @@ def _detect_file_type(df: pd.DataFrame) -> str:
     return "unknown"
 
 
+def _extract_dates_from_text(text: str) -> List[str]:
+    """Find date-like strings in text and return in YYYY-MM-DD format."""
+    # Common formats: 01-Jan-2023, 01/01/2023, 2023-01-01, 01-01-2023
+    patterns = [
+        r'\d{4}-\d{2}-\d{2}',           # 2023-01-01
+        r'\d{2}-\d{2}-\d{4}',           # 01-01-2023
+        r'\d{2}/\d{2}/\d{4}',           # 01/01/2023
+        r'\d{1,2}-\w{3}-\d{4}',         # 01-Jan-2023
+        r'\d{1,2} \w{3} \d{4}',         # 01 Jan 2023
+    ]
+    found = []
+    for p in patterns:
+        matches = re.findall(p, text)
+        for m in matches:
+            try:
+                # Use pandas to flexibly parse found date strings
+                dt = pd.to_datetime(m, errors='coerce')
+                if not pd.isna(dt):
+                    found.append(dt.strftime('%Y-%m-%d'))
+            except: pass
+    return sorted(list(set(found)))
+
+
 # ── Upload ────────────────────────────────────────────────────────────
 @app.post("/api/upload")
 async def upload_file(file: UploadFile = File(...)):
     """Upload CSV/XLSX, sniff headers, return detected type + preview."""
     session_id = str(uuid.uuid4())
     session_ctx_var.set(session_id)
-    logger.info("Received file upload", extra={"filename": file.filename})
+    # Note: Upload is often done before login or with separate state
+    # If the user is known, it should be set here. 
+    # For now, 'system' or 'anonymous' if not provided.
+    logger.info("Received file upload", extra={"uploaded_filename": file.filename})
 
     sess_dir = _session_dir(session_id)
     os.makedirs(sess_dir, exist_ok=True)
@@ -111,6 +188,7 @@ async def upload_file(file: UploadFile = File(...)):
         else:
             df = pd.read_excel(raw_path)
     except Exception as e:
+        logger.error(f"Failed to read uploaded file: {str(e)}", exc_info=True)
         raise HTTPException(status_code=400, detail=f"Failed to read file: {str(e)}")
 
     file_type = _detect_file_type(df)
@@ -128,9 +206,27 @@ async def upload_file(file: UploadFile = File(...)):
         except Exception:
             pass
 
-    detected_metadata = MetadataExtractor.extract_from_file(raw_path)
-    if start_date: detected_metadata['start_date'] = start_date
-    if end_date: detected_metadata['end_date'] = end_date
+    # Fallback: Scan file headers (first 50 lines) for dates if column didn't yield them
+    # OR if we want to confirm the range from the header
+    header_dates = []
+    try:
+        # Read first few KB to scan for dates in headers
+        with open(raw_path, 'r', errors='ignore') as f:
+            head = "".join([f.readline() for _ in range(50)])
+            header_dates = _extract_dates_from_text(head)
+    except: pass
+
+    detected_metadata = {}
+    # Prioritize header dates if found (often more accurate to report period)
+    if header_dates:
+        detected_metadata['start_date'] = header_dates[0]
+        detected_metadata['end_date'] = header_dates[-1]
+    
+    # Fill in from column if still missing
+    if 'start_date' not in detected_metadata and start_date:
+        detected_metadata['start_date'] = start_date
+    if 'end_date' not in detected_metadata and end_date:
+        detected_metadata['end_date'] = end_date
 
     return JSONResponse(content=sanitize_for_json({
         "session_id": session_id,
@@ -157,6 +253,7 @@ async def verify_data(session_id: str = Form(...)):
     
     sess_dir = _session_dir(session_id)
     if not os.path.exists(sess_dir):
+        logger.warning(f"Verification failed: Session {session_id} not found")
         raise HTTPException(status_code=404, detail="Session not found")
 
     # Find raw file
@@ -167,6 +264,7 @@ async def verify_data(session_id: str = Form(...)):
             break
 
     if not raw_path:
+        logger.warning(f"Verification failed: No uploaded file found for session {session_id}")
         raise HTTPException(status_code=400, detail="No uploaded file found")
 
     # Read
@@ -200,6 +298,7 @@ async def verify_data(session_id: str = Form(...)):
 @app.post("/api/generate")
 async def generate_reports(
     session_id: str = Form(...),
+    username: str = Form(...),
     bank_name: str = Form(""),
     branch_name: str = Form(""),
     account_name: str = Form(""),
@@ -213,10 +312,16 @@ async def generate_reports(
 ):
     """Generate selected AML reports with provided metadata."""
     session_ctx_var.set(session_id)
-    logger.info("Starting report generation", extra={"bank_name": bank_name, "annexes": annexes})
+    user_ctx_var.set(username)
+    logger.info("Starting report generation", extra={
+        "user": username,
+        "bank_name": bank_name,
+        "annexes": annexes
+    })
     
     sess_dir = _session_dir(session_id)
     if not os.path.exists(sess_dir):
+        logger.warning(f"Generation failed: Session {session_id} not found")
         raise HTTPException(status_code=404, detail="Session not found")
 
     raw_path = None
@@ -225,6 +330,7 @@ async def generate_reports(
             raw_path = os.path.join(sess_dir, f)
             break
     if not raw_path:
+        logger.warning(f"Generation failed: No uploaded file found for session {session_id}")
         raise HTTPException(status_code=400, detail="No uploaded file found")
 
     output = _output_dir(session_id)
@@ -315,13 +421,6 @@ async def download_all(session_id: str):
 @app.get("/api/health")
 async def health():
     return {"status": "ok", "version": "1.0.0"}
-
-
-@app.get("/api/lookup/{account_number}")
-async def lookup_account(account_number: str):
-    """Real-time lookup for account metadata."""
-    metadata = MetadataExtractor.lookup_account(account_number)
-    return JSONResponse(content=sanitize_for_json(metadata))
 
 if __name__ == "__main__":
     import uvicorn

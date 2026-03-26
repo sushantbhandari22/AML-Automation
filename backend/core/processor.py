@@ -28,7 +28,8 @@ class DataProcessor:
         ("MOBILE BANKING",        lambda c, _: any(k in c for k in ['mob', 'mobile banking', 'jpp'])),
         ("SYSTEM TXN",            lambda c, _: any(k in c for k in ['int from', 'int to', 'normal int', 'charge', 'tax', 'fee', 'interestbank'])),
         ("CARD TXN",              lambda c, _: any(k in c for k in ['atm', 'atm card', 'visa'])),
-        ("CASH TXN",              lambda c, _: any(k in c for k in ['cash depo', 'home cheque', 'home chq', 'self', 'withdrawn by', 'cash recieve'])),
+        ("CASH TXN",              lambda c, _: any(k in c for k in ['cash', 'cash depo', 'home cheque', 'home chq', 'self', 'withdrawn by', 'cash recieve'])),
+        ("Remit TXN",             lambda c, _: 'remit' in c),
         ("CHOOSE BY USER",        lambda c, _: 'choose by user' in c),
     ]
 

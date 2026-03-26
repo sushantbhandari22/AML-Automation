@@ -2,7 +2,7 @@
 
 Welcome to the Automated AML Report Generation system. This tool is designed to help you generate compliant Annex reports (I, II, III, IV) and transaction summaries with minimal effort.
 
-## 🚀 How to Generate Reports in One Click
+## How to Generate Reports in One Click
 
 Generating your reports is designed to be simple and "Zero-Touch". Follow these steps:
 
