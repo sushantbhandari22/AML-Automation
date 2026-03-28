@@ -139,7 +139,6 @@ def _detect_file_type(df: pd.DataFrame) -> str:
 
 def _extract_dates_from_text(text: str) -> List[str]:
     """Find date-like strings in text and return in YYYY-MM-DD format."""
-    # Common formats: 01-Jan-2023, 01/01/2023, 2023-01-01, 01-01-2023
     patterns = [
         r'\d{4}-\d{2}-\d{2}',           # 2023-01-01
         r'\d{2}-\d{2}-\d{4}',           # 01-01-2023
@@ -152,12 +151,28 @@ def _extract_dates_from_text(text: str) -> List[str]:
         matches = re.findall(p, text)
         for m in matches:
             try:
-                # Use pandas to flexibly parse found date strings
                 dt = pd.to_datetime(m, errors='coerce')
                 if not pd.isna(dt):
                     found.append(dt.strftime('%Y-%m-%d'))
             except: pass
     return sorted(list(set(found)))
+
+
+def _extract_account_number_from_text(text: str) -> Optional[str]:
+    """Search for Account Number patterns in string content."""
+    patterns = [
+        r"(?:Account Number|A/C No|Account No|Account\s*#)[:\s]*([0-9A-Z-]+)",
+        r"\b\d{10,24}\b", # Common account digit lengths
+    ]
+    for p in patterns:
+        match = re.search(p, text, re.IGNORECASE)
+        if match:
+            # If we matched a label + group, return the group
+            if match.groups() and match.group(1):
+                return match.group(1).strip()
+            # Otherwise return the whole match (likely the digits-only pattern)
+            return match.group(0).strip()
+    return None
 
 
 # ── Upload ────────────────────────────────────────────────────────────
@@ -209,14 +224,18 @@ async def upload_file(file: UploadFile = File(...)):
     # Fallback: Scan file headers (first 50 lines) for dates if column didn't yield them
     # OR if we want to confirm the range from the header
     header_dates = []
+    acc_no = None
     try:
-        # Read first few KB to scan for dates in headers
+        # Read first few KB to scan for dates/account in headers
         with open(raw_path, 'r', errors='ignore') as f:
             head = "".join([f.readline() for _ in range(50)])
             header_dates = _extract_dates_from_text(head)
+            acc_no = _extract_account_number_from_text(head)
     except: pass
 
     detected_metadata = {}
+    if acc_no:
+        detected_metadata['account_number'] = acc_no
     # Prioritize header dates if found (often more accurate to report period)
     if header_dates:
         detected_metadata['start_date'] = header_dates[0]
